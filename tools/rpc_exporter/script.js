@@ -146,7 +146,14 @@ processBtn.addEventListener("click", async () => {
     let gameVersion = "";
 
     const classRegex = / class (\w+)/;
-    const registerPattern = /\.Register.*?\(([a-zA-Z0-9_"]+?),[a-zA-Z0-9 .]+(<[a-zA-Z0-9, <>]+>)?.*?\(([a-zA-Z0-9_.]+)/;
+    //const registerPattern = /\.Register.*?\(([a-zA-Z0-9_"]+?),[a-zA-Z0-9 .]+(<[a-zA-Z0-9, <>]+>)?.*?\(([a-zA-Z0-9_.]+)/;
+    // this new pattern accounts for class variables instead of constexpr strings
+    //const registerPattern = /\.Register.*?\(([a-zA-Z0-9_".]+?),[a-zA-Z0-9 .]+(<[a-zA-Z0-9, <>]+>)?.*?\(([a-zA-Z0-9_.]+)/;
+    
+    // this newer pattern matches exactly 'Register' without prefix or suffix
+    const registerPattern = /\bRegister\b(?:<[^()]*>)?\s*\(([a-zA-Z0-9_".]+?),[a-zA-Z0-9 .]+(<[a-zA-Z0-9, <>]+>)?.*?\(([a-zA-Z0-9_.]+)/;
+
+    let hasDifficultMatches = false;
 
     for (let file of sortedFiles) {
         const text = await file.text();
@@ -162,18 +169,54 @@ processBtn.addEventListener("click", async () => {
 
             const regMatch = line.match(registerPattern);
             if (regMatch) {
-                let hashName = regMatch[1].replace(/"/g, "");
+                // first check if string startsWith "
+                //  if so, then good, 
+                //  otherWISE, we must notate this as hard to extract
+                //      (uses a const var string probably then)
+
+                // simple pre exclude
+                //  so smth like RenderGroupSubscriber can be excluded
+                if (!line.includes("Method") && !line.includes("Action")) {
+                    continue;
+                }
+
+                let isDifficult = false;
+
+                let rawHashRef = regMatch[1];
+                if (!rawHashRef.startsWith("\"")) {
+                    console.log(rawHashRef + " is not easily exportable");
+
+                    // TODO manually extract the variable def from the src
+                    hasDifficultMatches = true;
+                    isDifficult = true;
+                }
+
+                let hashName = rawHashRef.replace(/"/g, "");
                 let params = regMatch[2] ? regMatch[2].slice(1, -1) : "";
                 let methodName = regMatch[3].replace("this.", "");
 
                 let regType = "";
-                if (params.includes("ZRpc")) {
-                    regType = "ZRpc";
-                } else if (line.includes("oute")) {
-                    regType = "ZRoutedRpc";
-                } else {
-                    regType = "ZNetView";
-                }
+/*                 if (params === "") {
+                    // then we might be extracting a custom predefined generic
+                    //  (like RpcMethod)
+                    if (line.includes("\.Method")) {
+                        if (line.includes("ZRpc")) {
+                            regType = "ZRpc";
+                        } else if (line.includes("ZRoutedRpc")) {
+                            regType = "ZRoutedRpc";
+                        } else {
+                            regType = "ZNetView";
+                        }
+                    }
+                } else { */
+                    if (/* params */line.includes("ZRpc")) {
+                        regType = "ZRpc";
+                    } else if (line.includes("ZRoutedRpc")) {
+                        regType = "ZRoutedRpc";
+                    } else {
+                        regType = "ZNetView";
+                    }
+/*                 } */
 
                 if (!clazzes[clazzName]) {
                     clazzes[clazzName] = {};
@@ -183,7 +226,11 @@ processBtn.addEventListener("click", async () => {
                     methodName,
                     params,
                     regType,
-                    hash: stable_hash(hashName)
+                    // TODO must try extracting the str and hash from 
+                    //  the member variable later in the file...
+                    //  Might be better to use a bytecode analyzer or mod instead...
+                    hash: isDifficult ? "" : stable_hash(hashName),
+                    isDifficult: isDifficult
                 };
             }
 
@@ -204,7 +251,17 @@ processBtn.addEventListener("click", async () => {
 
         if (keys.length === 0) continue;
 
-        tableStr += `**${clazz}**\n`;
+        // check for any entry thats difficult (im lazy)
+        let hasDifficult = false;
+        for (let key of keys) {
+            const entry = rpcEntries[key];
+            if (entry.isDifficult) {
+                hasDifficult = true;
+                break;
+            }
+        }
+
+        tableStr += `**${clazz}**${hasDifficult ? " (needs revising)" : ""}\n`;
         tableStr += `| Name | Method | Params | Registers to | Hash |\n`;
         tableStr += `|-|-|-|-|-|\n`;
 
@@ -221,4 +278,8 @@ processBtn.addEventListener("click", async () => {
 
     outputSection.style.display = "block";
     outputTitle.style.display = "block";
+
+    if (hasDifficultMatches) {
+        alert("some difficult to export hashes are present; see console")
+    }
 });
