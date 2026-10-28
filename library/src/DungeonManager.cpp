@@ -76,8 +76,14 @@ void DungeonManager::post_prefab_init()
         auto doorCount = pkg.read<std::int32_t>();
         for (int i2 = 0; i2 < doorCount; i2++) {
             // Debug anchor
-            if (pkg.read<avledet::util::Hash>() != VUtils::get_stable_hash("dungeonDoor")) {
-                throw std::runtime_error("bad read anchor");
+            {
+                int test = pkg.read<avledet::util::Hash>();
+                if (test == 0) {
+                    continue;
+                }
+                if (test != VUtils::get_stable_hash("dungeonDoor")) {
+                    throw std::runtime_error("bad read anchor");
+                }
             }
 
             //Dungeon::DoorDef door;

@@ -1,5 +1,6 @@
 #include "Peer.h"
 #include "Avledet.h"
+#include "DataStream.h"
 #include "NetManager.h"
 #include "ReplayManager.h"
 #include "RouteManager.h"
@@ -13,6 +14,7 @@
 #include <magic_enum/magic_enum.hpp>
 #include <quill/LogMacros.h>
 #include <quill/Utility.h>
+#include <string_view>
 
 // Static globals initialized once
 //std::string Peer::PASSWORD;
@@ -27,7 +29,10 @@ Peer::Peer(ISocket::Ptr socket) :
         self->Disconnect();
     });
 
-    this->Register("ServerHandshake", [](Peer::Ptr rpc) {
+    this->Register("ServerHandshake", [](Peer::Ptr rpc, std::string/*_view*/ secret_key) {
+        // TODO unable to determine if used by client or what currently...
+        (void) secret_key;
+
         rpc->Register("PeerInfo", [](Peer::Ptr rpc, DataReader reader) {
             rpc->m_characterID.set_user_id(reader.read<std::int64_t>());
 #if AVL_IS_ON(AVL_DISALLOW_MALICIOUS_PLAYERS)
@@ -55,7 +60,35 @@ Peer::Peer(ISocket::Ptr socket) :
             if (!(rpc->m_name.length() >= 3 && rpc->m_name.length() <= 15))
                 throw std::runtime_error("peer provided invalid length name");
 #endif
+            // read playfab id
+            reader.read<std::string_view>();
+
+            // TODO read sim distance
+            reader.read<std::int32_t>();
+            reader.read<std::int32_t>();
+            reader.read<bool>();
+
+            // TODO do the sim distance back-and-forth get/assign...
+            //  (across remotes obviously)
+            //assert(false);
+            LOG_WARNING(AVL_LOGGER, "if sim appears broken must impl handshake");
+
+            {
+                // because nothing is loading on player-side,
+                //  I am assuming that sim-dist is mandatory
+                // TODO make sim-dist a fn like in the c#...
+                DataWriter simdist;
+                simdist.write(2);
+                simdist.write(2);
+                simdist.write(false);
+                rpc->Invoke("RPC_ValidatedSimulationDistance", simdist.release() );
+            }
+
             auto password = reader.read<std::string_view>();
+
+            // TODO this isnt really necessary on dedicated server,
+            //  but the devs added a invite-only secret key check
+            reader.read<std::string_view>();
 
             if (AVL_CONFIG.m_player_auth) {
                 auto ticket = reader.read<avledet::util::ByteView>();

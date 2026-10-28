@@ -80,14 +80,16 @@ void NetManager::SendPlayerList()
             writer.write((std::uint32_t) m_onlinePeers.size());
 
             for (auto &&peer : m_onlinePeers) {
-                writer.write(peer->m_name);
-                writer.write(peer->m_characterID);
-                writer.write("steam_" + peer->m_socket->get_host_name());
                 auto &&platformItr = peer->m_syncData.find("platformDisplayName");
                 auto &&platform    = platformItr != peer->m_syncData.end() ? platformItr->second : "";
-                writer.write(platform);           // ...?
+
+                writer.write(peer->m_name);
+                writer.write(peer->m_characterID);
+                writer.write("steam_" + peer->m_socket->get_host_name()); // userinfo id
+                writer.write("steam_" + peer->m_socket->get_host_name()); // userinfo displayname
                 auto forcedDisplayName = platform;//TODO the algo / usage is kinda weird / convoluted
-                writer.write(forcedDisplayName);  //TODO
+                writer.write(forcedDisplayName);  // server assigned display name
+                writer.write(""); // playfab id
                 writer.write(peer->IsMapVisible() || AVL_CONFIG.playerListForceVisible);
                 if (peer->IsMapVisible() || AVL_CONFIG.playerListForceVisible) {
                     if (AVL_CONFIG.playerListSmoothUpdating >= 2s)
@@ -125,8 +127,13 @@ void NetManager::SendPeerInfo(Peer::Ptr peer)
         writer.write(Avledet::instance().ID());
         writer.write(std::string_view(VConstants::GAME));
         writer.write(VConstants::NETWORK);
-        writer.write(Vector3f::ZERO);      // dummy
-        writer.write(std::string_view(""));// dummy
+        writer.write(Vector3f::ZERO);      // dummy (refpos)
+        writer.write(std::string_view(""));// dummy (player name)
+        writer.write(std::string_view(""));// dummy (playfab name)
+
+        writer.write<int>(2); // sim near
+        writer.write<int>(2); // sim far
+        writer.write<bool>(false); // classic
 
         auto world = WorldManager::instance().GetWorld();
 
@@ -175,21 +182,6 @@ void NetManager::OnPeerConnect(Peer::Ptr peer)
         }
     });
 
-    // isnt 'ban' a command?
-    //  it should be part of RemoteCommand
-    peer->Register("RemoteCommand",
-                   [](Peer::Ptr peer, std::string_view command) {
-                       if (!peer->IsAdmin())
-                           return peer->ConsoleMessage("You are not admin");
-
-                       // TODO run commands or something?
-                       //  this is still in beta and subject to change
-                       //  although unlikely because this commands gets funneled to
-                       //  valheim commands, which have existed for a while.
-                       //  The only difference is that some commands are now classified as remote vs local.
-                       (void) command;
-                   });
-
     // Important
     peer->Register("CharacterID", [](Peer::Ptr peer, ZDOID characterID) {
         // Peer sends 0,0 on after death
@@ -204,6 +196,19 @@ void NetManager::OnPeerConnect(Peer::Ptr peer)
         peer->m_characterID = characterID;
 
         LOG_NOTICE(AVL_LOGGER, "Got CharacterID from {} ({})", peer->m_name, characterID);
+    });
+
+    // TODO this function is NEW in deep north
+    peer->Register("PlayerID", [](Peer::Ptr peer, std::int64_t playerID) {
+        // TODO wip
+        assert(false);
+    });
+
+    // TODO this function is NEW in deep north
+    peer->Register("RPC_PeerRealtimeMultiplaying", [](Peer::Ptr peer, bool multiplaying) {
+        // TODO wip
+        //  this entire MultiplayingUsage is mucroslop-only bloat.
+        //assert(false);
     });
 
     peer->Register("Kick",
@@ -242,6 +247,21 @@ void NetManager::OnPeerConnect(Peer::Ptr peer)
                        Unban(user);
 
                        peer->ConsoleMessage("Unbanning user " + std::string(user));
+                   });
+
+    // isnt 'ban' a command?
+    //  it should be part of RemoteCommand
+    peer->Register("RPC_RemoteCommand",
+                   [](Peer::Ptr peer, std::string_view command) {
+                       if (!peer->IsAdmin())
+                           return peer->ConsoleMessage("You are not admin");
+
+                       // TODO run commands or something?
+                       //  this is still in beta and subject to change
+                       //  although unlikely because this commands gets funneled to
+                       //  valheim commands, which have existed for a while.
+                       //  The only difference is that some commands are now classified as remote vs local.
+                       (void) command;
                    });
 
     peer->Register("Save", [](Peer::Ptr peer) {
