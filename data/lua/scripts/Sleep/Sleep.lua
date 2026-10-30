@@ -18,7 +18,7 @@ local SIG_SleepStop = MethodSig.new("SleepStop")
 local UPDATE_SLEEP_FN = function()
     assert(sleeping)
 
-    if Avledet.worldTime > sleepingUntil then
+    if Avledet.world_time > sleepingUntil then
         local peers = NetManager.peers
 
         for i = 1, #peers do
@@ -93,7 +93,7 @@ Avledet:subscribe(
                 print("starting sleep")
 
                 sleeping = true
-                sleepingUntil = Avledet.next_morning
+                sleepingUntil = Avledet.tomorrow_morning
                 Avledet.world_time_multiplier = (sleepingUntil - Avledet.world_time) / 12
 
                 for i = 1, #sleepingPeers do

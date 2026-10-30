@@ -11,6 +11,8 @@
 
         my code below also exhibits this, (un)fortunately? so.
 --]]
+require 'cross-api'
+
 local const
 SIG_RPC_SetConnection = MethodSig.new("RPC_SetConnection", Type.ZDOID, Type.ZDOID)
 
@@ -30,7 +32,7 @@ local is_connecting = function(zdo)
 end
 
 local set_connection = function(portal, connection, force)
-    local flag = NetManager:get_peer(portal.owner)
+    local flag = NetManager:find_peer(tostring(portal.owner))
     if not portal.owned or not flag or force then
         portal.owner = Avledet.id
         portal:set_connection(ConnectionType.PORTAL, connection)
@@ -76,7 +78,7 @@ local find_any_portal = function(portals, ignore_zdo, tag)
     end
 
     --ensure index within range
-    return assert(list[Random.new():irange(0, #list) + 1])
+    return assert(list[Random.new():range_int(0, #list) + 1])
 end
 
 local RPC_SetConnection = function(sender, portalID, connectionID)
@@ -101,7 +103,7 @@ Avledet:subscribe(
 
             if connectionZDOID ~= ZDOID.NONE then
                 local tag = zdo:get_string("tag")
-                local zdo2 = ZDOManager:get_zdo(connectionZDOID)
+                local zdo2 = ZDOManager:find_zdo(connectionZDOID)
                 if not zdo2 or zdo2:get_string("tag") ~= tag then
                     set_connection(zdo, ZDOID.NONE --[[, false--]])
                 end
